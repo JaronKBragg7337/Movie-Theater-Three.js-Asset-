@@ -113,8 +113,8 @@ export class Player {
     const speed = (this.run || this.keys.has('ShiftLeft')) ? RUN : WALK;
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     // yaw 0 looks down -Z; forward = (-sin, -cos)
-    const wantX = (ix * cos - iz * sin) * speed;
-    const wantZ = (-ix * sin - iz * cos) * speed;
+    const wantX = (ix * cos + iz * sin) * speed;
+    const wantZ = (-ix * sin + iz * cos) * speed;
 
     this.vel.x = THREE.MathUtils.damp(this.vel.x, wantX, ACCEL, dt);
     this.vel.z = THREE.MathUtils.damp(this.vel.z, wantZ, ACCEL, dt);
