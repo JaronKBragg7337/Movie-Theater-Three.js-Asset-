@@ -13,6 +13,10 @@ texture licence to inherit. **CC0** — public domain, use it for anything.
 
 ## Quick look
 
+live page: https://jaronkbragg7337.github.io/Movie-Theater-Three.js-Asset-/
+
+or 
+
 ```bash
 npx serve . -l 5173
 ```
