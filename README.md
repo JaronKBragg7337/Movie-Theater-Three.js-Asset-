@@ -51,16 +51,26 @@ vanishes. Nothing occludes the view while you are just looking around.
 The screen starts on a live Academy countdown leader (drawn to a canvas each
 frame, so it is never black) and accepts:
 
-- **Built-in playlist** — ten Blender Foundation open movies (CC-BY), streamed
-  from Wikimedia Commons, which serves `access-control-allow-origin: *`.
-- **Any URL** — paste an `.mp4`/`.webm` link.
+- **Built-in playlist** — ten Blender Foundation open movies (CC-BY). Every
+  entry offers H.264/AAC MP4 from Blender's official video service and
+  VP9/Opus WebM from Wikimedia Commons. The player ranks candidates with
+  `canPlayType()`, falls back on decode failure, and only declares success
+  after a decoded frame has rendered through WebGL.
+- **Direct media URL** — paste an `.mp4`, `.webm`, `.mov`, `.m4v`, `.ogv`, or
+  native-HLS link. It remains a real three.js `VideoTexture`, so screen-frame
+  sampling and film-driven auditorium lighting continue to work.
+- **YouTube or TikTok share URL** — normal watch/share links are recognised and
+  displayed on the physical theater screen with each provider's supported
+  iframe player. Because browser security does not expose those cross-origin
+  frames to WebGL, provider embeds deliberately use neutral screen spill.
 - **Local upload** — pick a file; it plays from a blob URL.
 
-The CORS header matters: the auditorium lighting is driven by sampling the
-video frame down to 12×12 pixels and feeding the average colour and luminance
-into the screen's `RectAreaLight`. The room genuinely flickers with the film.
-A cross-origin source without CORS taints the canvas, sampling is disabled,
-and the light falls back to a neutral wash — the video still plays.
+For direct URLs, the CORS header matters: the auditorium lighting is driven by
+sampling the video frame down to 12×12 pixels and feeding the average colour
+and luminance into the screen's `RectAreaLight`. WebGL also requires CORS
+permission before it can upload a cross-origin video frame as a texture. A
+host that does not grant it cannot be used as a direct `VideoTexture`; use a
+CORS-enabled media URL or one of the supported provider share links instead.
 
 > **Note:** browsers refuse to load or decode media in a hidden/background tab.
 > If the screen stays on the countdown leader, make sure the tab is visible.
@@ -100,7 +110,10 @@ So a bug report can be one line:
 - Collision volumes in red, asset AABBs in green.
 - A live **floating / buried / overlap report**. Anything whose base sits more
   than 2 cm off its declared support plane is flagged by ID and grid address,
-  with the error in centimetres. Click a finding to teleport to it.
+  with the error in centimetres. The same report grid-scans the auditorium,
+  thresholds, lobby, and forecourt for missing walking surfaces or collision /
+  rendered-height drift, including probes on both sides of every riser edge.
+  Click a finding to teleport to it.
 - A teleport box that accepts either a grid address (`L0-H14-R8`) or an asset
   ID (`SEAT#47`).
 
@@ -111,6 +124,7 @@ THEATER.goto('L0-H14-R8')   // or THEATER.goto('SEAT#47')
 THEATER.where()             // grid address of the camera
 THEATER.sit('H12')          // sit in a named seat
 THEATER.report()            // { total, counts, issues[] }
+THEATER.validateWalkables() // re-run the rendered-surface grid audit
 THEATER.openAllDoors()
 THEATER.removeTestEnvironment()
 ```
@@ -145,8 +159,13 @@ separate group named `TEST_ENVIRONMENT` for exactly this reason. It exists so
 the building has something to stand on in the demo; delete it and drop the
 building into your own terrain.
 
-`floorHeightAt(z)` and `levelAt(z)` in `src/layout.js` are the walkable-surface
-queries. If your world transforms the root, convert to root-local space first.
+`floorHeightAt(z)` and `levelAt(z)` in `src/layout.js` remain the compact layout
+reference queries. In the demo, movement and inspection use
+`WalkableSurfaceMap` from `src/walkable.js`: it raycasts the exact geometries
+used to render the apron, risers, cross-aisle, house thresholds, lobby, and
+forecourt. The mathematical query is only a fallback and an independent drift
+check. If your world transforms the root, convert queries to root-local space
+first.
 
 **Currently single-instance:** the asset registry is module-level, so two
 theaters in one page would share an ID space. Splitting the registry per
@@ -215,6 +234,8 @@ src/
   building.js    lobby, concession, box office, façade, canopy, forecourt
   doors.js       hinged interactive leaves + collision that follows the swing
   videoscreen.js video texture, playlist, and screen-driven room lighting
+  media.js       direct/provider URL recognition and codec capability ranking
+  walkable.js    rendered-floor raycasts + grid/ID mismatch validation
   controls.js    pointer-lock FPS + the invisible mobile joystick
   registry.js    permanent IDs, grid maths, floating/buried validation
   inspector.js   the `G` layer
@@ -227,11 +248,30 @@ src/
 
 - **Video needs a visible tab.** Browsers will not decode media in a
   background tab; this is a browser policy, not a bug in the asset.
+- **Provider embeds use neutral spill.** YouTube and TikTok correctly remain
+  inside their cross-origin official players, so their pixels cannot drive
+  auditorium-light sampling. Direct URLs and local uploads still do.
 - **No shadow maps.** The auditorium is lit by an area light from the screen,
   which casts no shadows in three.js anyway. The exterior moon fill is kept
   deliberately weak because without shadows a strong directional light would
   leak through the walls. Contact darkening under seats is a cheap decal.
 - **Single instance per page** (see above).
+
+---
+
+## Validation
+
+The repository includes unit and phone-viewport browser tests:
+
+```bash
+npm ci
+npm test
+```
+
+The browser suite checks the full rendered walkable-surface report, the mobile
+forward/back convention, official-provider embed isolation/occlusion, and the
+actual H.264 decode → `VideoTexture` → WebGL path for Big Buck Bunny, Sintel,
+and Tears of Steel. A successful media URL response alone does not pass.
 
 ---
 

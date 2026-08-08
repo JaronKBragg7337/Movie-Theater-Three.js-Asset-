@@ -3,9 +3,10 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js';
 
 import * as TX from './textures.js';
-import { L, rowY, rowZ, rowLevel, seatX, ROW_LETTERS, floorHeightAt, levelAt } from './layout.js';
+import { L, rowY, rowZ, rowLevel, seatX, ROW_LETTERS } from './layout.js';
 import { buildTheater } from './theater.js';
 import { buildBuilding } from './building.js';
 import { DoorSet } from './doors.js';
@@ -13,7 +14,8 @@ import { buildSeatParts, buildEndStandard, buildNumberTag, makeNumberAtlas, SEAT
 import { Player, bindInput } from './controls.js';
 import { VideoScreen, PLAYLIST } from './videoscreen.js';
 import { Inspector } from './inspector.js';
-import { register, registry, worldToGrid, gridLabel } from './registry.js';
+import { register, registerValidator, registry, worldToGrid, gridLabel } from './registry.js';
+import { WalkableSurfaceMap } from './walkable.js';
 
 const loadingEl = document.getElementById('loading');
 const loadingText = document.getElementById('loading-text');
@@ -36,6 +38,15 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
+
+// Provider embeds cannot become WebGL textures. CSS3D places their official
+// iframe players on the same world-space screen while WebGL keeps ownership
+// of local/direct media, sampling, and auditorium lighting.
+const embedRenderer = new CSS3DRenderer();
+embedRenderer.setSize(innerWidth, innerHeight);
+embedRenderer.domElement.id = 'embed-renderer';
+embedRenderer.domElement.style.cssText = 'position:fixed;inset:0;z-index:31;pointer-events:none;overflow:hidden';
+document.body.appendChild(embedRenderer.domElement);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x070a14, 0.0105);
@@ -306,11 +317,16 @@ function writeHinge(meshes, i, rec) {
   await step('Pouring the lobby…');
   const building = buildBuilding(root, M, doorSet);
 
+  const walkable = new WalkableSurfaceMap([...theater.walkables, ...building.walkables]);
+  const validateWalkables = () => walkable.validate();
+  validateWalkables();
+  registerValidator('rendered walkable surfaces', () => walkable.validation);
+
   await step('Bolting down 448 seats…');
   const seating = buildSeats(root, M);
 
   await step('Threading the projector…');
-  const screen = new VideoScreen(root);
+  const screen = new VideoScreen(root, renderer);
   screen.mesh.material.map = screen.leader.texture;
 
   /* ---- night sky ---- */
@@ -429,7 +445,7 @@ function writeHinge(meshes, i, rec) {
 
   /* ---- player + input ---- */
   const staticColliders = [...theater.colliders, ...building.colliders];
-  const player = new Player(camera, staticColliders);
+  const player = new Player(camera, staticColliders, walkable);
   // Start outside, on the forecourt, facing the marquee.
   player.pos.set(0, L.gradeY, L.facadeZ + 15.0);
   player.yaw = 0;
@@ -446,7 +462,7 @@ function writeHinge(meshes, i, rec) {
   };
   const input = bindInput(player, dom);
 
-  const inspector = new Inspector(scene, camera, player, staticColliders);
+  const inspector = new Inspector(scene, camera, player, staticColliders, walkable);
   input.onToggleInspect = () => inspector.toggle();
 
   /* ---- interaction: doors and seats share one action ---- */
@@ -497,15 +513,28 @@ function writeHinge(meshes, i, rec) {
   /* ---- video panel ---- */
   const panel = document.getElementById('video-panel');
   const list = document.getElementById('video-list');
+  const videoStatus = document.getElementById('video-status');
+  const muteBtn = document.getElementById('mute-btn');
+  const setVideoStatus = (message, isError = false) => {
+    videoStatus.textContent = message;
+    videoStatus.classList.toggle('error', isError);
+  };
   PLAYLIST.forEach((v, i) => {
     const d = document.createElement('div');
     d.className = 'video-item';
     d.innerHTML = `<span>${v.title}</span><span>▶</span>`;
-    d.addEventListener('click', () => {
+    d.addEventListener('click', async () => {
       list.querySelectorAll('.video-item').forEach((n) => n.classList.remove('active'));
       d.classList.add('active');
-      screen.load(v.url, v.title);
       screen.setMuted(false);
+      setVideoStatus(`Loading ${v.title}…`);
+      try {
+        const selected = await screen.load(v.sources, v.title);
+        setVideoStatus(`${v.title} · ${selected.label || selected.type} · rendered VideoTexture verified`);
+      } catch (error) {
+        setVideoStatus(error instanceof Error ? error.message : String(error), true);
+      }
+      muteBtn.textContent = screen.state.muted ? '🔇' : '🔊';
     });
     list.appendChild(d);
     void i;
@@ -520,16 +549,37 @@ function writeHinge(meshes, i, rec) {
   openBtn.addEventListener('click', () => showPanel(true));
   document.getElementById('menu-btn').addEventListener('click', () => showPanel(true));
   document.getElementById('panel-close').addEventListener('click', () => showPanel(false));
-  document.getElementById('load-url-btn').addEventListener('click', () => {
+  document.getElementById('load-url-btn').addEventListener('click', async () => {
     const u = document.getElementById('video-url').value.trim();
-    if (u) { screen.load(u, 'Custom URL'); screen.setMuted(false); }
+    if (!u) return;
+    screen.setMuted(false);
+    setVideoStatus('Recognising video link…');
+    try {
+      const selected = await screen.loadUrl(u);
+      if (selected.kind === 'embed') {
+        setVideoStatus(`${selected.provider === 'youtube' ? 'YouTube' : 'TikTok'} official embedded player · neutral auditorium spill`);
+      } else {
+        setVideoStatus(`Direct media · ${selected.label || selected.type} · rendered VideoTexture verified`);
+      }
+    } catch (error) {
+      setVideoStatus(error instanceof Error ? error.message : String(error), true);
+    }
+    muteBtn.textContent = screen.state.muted ? '🔇' : '🔊';
   });
-  document.getElementById('video-upload').addEventListener('change', (e) => {
+  document.getElementById('video-upload').addEventListener('change', async (e) => {
     const f = e.target.files?.[0];
-    if (f) { screen.loadFile(f); screen.setMuted(false); }
+    if (!f) return;
+    screen.setMuted(false);
+    setVideoStatus(`Loading ${f.name}…`);
+    try {
+      const selected = await screen.loadFile(f);
+      setVideoStatus(`${f.name} · ${selected.label || 'local media'} · rendered VideoTexture verified`);
+    } catch (error) {
+      setVideoStatus(error instanceof Error ? error.message : String(error), true);
+    }
+    muteBtn.textContent = screen.state.muted ? '🔇' : '🔊';
   });
   document.getElementById('play-pause-btn').addEventListener('click', () => screen.toggle());
-  const muteBtn = document.getElementById('mute-btn');
   muteBtn.addEventListener('click', () => {
     screen.setMuted(!screen.state.muted);
     muteBtn.textContent = screen.state.muted ? '🔇' : '🔊';
@@ -553,6 +603,7 @@ function writeHinge(meshes, i, rec) {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     composer?.setSize(innerWidth, innerHeight);
+    embedRenderer.setSize(innerWidth, innerHeight);
   };
   addEventListener('resize', onResize);
   addEventListener('orientationchange', () => setTimeout(onResize, 120));
@@ -582,6 +633,7 @@ function writeHinge(meshes, i, rec) {
 
     player.update(dt);
     screen.update(dt);
+    screen.updateEmbedVisibility(camera, player.colliders);
 
     lightTimer -= dt;
     if (lightTimer <= 0) { lightTimer = 0.12; updateLightPool(camera.position); }
@@ -637,17 +689,19 @@ function writeHinge(meshes, i, rec) {
 
     if (composer) composer.render();
     else renderer.render(scene, camera);
+    embedRenderer.render(scene, camera);
   }
   frame();
 
   // Public API — also what an agent drives from the console.
   window.THEATER = {
     root, scene, camera, renderer,
-    player, screen, inspector, registry, doorSet,
+    player, screen, inspector, registry, doorSet, walkable,
+    playlist: PLAYLIST,
     seats: seating.seats,
     site: building.site,
     goto: (q) => inspector.teleport(q),
-    where: () => gridLabel(worldToGrid(camera.position, levelAt(camera.position.z))),
+    where: () => gridLabel(worldToGrid(player.pos, walkable.levelAt(player.pos.x, player.pos.z))),
     sit: (label) => {
       const s = seating.seats.find((x) => x.label === label || x.id === label);
       if (s) { s.occupied = true; s.target = 0; dirty.add(s); player.sitOn(s); }
@@ -657,6 +711,8 @@ function writeHinge(meshes, i, rec) {
     closeAllDoors: () => { doorSet.doors.forEach((d) => d.close()); },
     /** Drop the bundled forecourt when embedding in your own world. */
     removeTestEnvironment: () => { building.site.removeFromParent(); },
+    validateWalkables,
+    playBuiltIn: (index = 0) => screen.load(PLAYLIST[index]?.sources || PLAYLIST[0].sources, PLAYLIST[index]?.title || PLAYLIST[0].title),
     report: () => inspector.refreshReport(),
   };
 })();

@@ -54,11 +54,12 @@ function boxEdges(box, out) {
 }
 
 export class Inspector {
-  constructor(scene, camera, player, colliders) {
+  constructor(scene, camera, player, colliders, walkable = null) {
     this.scene = scene;
     this.camera = camera;
     this.player = player;
     this.colliders = colliders;
+    this.walkable = walkable;
     this.enabled = false;
 
     this.group = new THREE.Group();
@@ -72,6 +73,14 @@ export class Inspector {
     this._buildDom();
   }
 
+  _floor(x, z) {
+    return this.walkable?.heightAt(x, z) ?? floorHeightAt(z);
+  }
+
+  _level(x, z) {
+    return this.walkable?.levelAt(x, z) ?? levelAt(z);
+  }
+
   /* ---- 1 m world grid, stepped to follow the seating deck ---- */
   _buildGrid() {
     const pts = [];
@@ -82,14 +91,13 @@ export class Inspector {
 
     for (let x = Math.ceil(x0); x <= x1; x += c) {
       for (let z = z0; z < z1; z += 0.25) {
-        const y0 = floorHeightAt(z) + eps;
-        const y1v = floorHeightAt(z + 0.25) + eps;
+        const y0 = this._floor(x, z) + eps;
+        const y1v = this._floor(x, z + 0.25) + eps;
         pts.push(x, y0, z, x, y1v, Math.min(z1, z + 0.25));
       }
     }
     for (let z = Math.ceil(z0); z <= z1; z += c) {
-      const y = floorHeightAt(z) + eps;
-      pts.push(x0, y, z, x1, y, z);
+      pts.push(x0, this._floor(x0, z) + eps, z, x1, this._floor(x1, z) + eps, z);
     }
 
     const g = new THREE.BufferGeometry();
@@ -103,12 +111,12 @@ export class Inspector {
     for (let x = Math.ceil(x0); x <= x1; x += c) {
       if (Math.round(x - GRID.originX) % 5 !== 0) continue;
       for (let z = z0; z < z1; z += 0.25) {
-        major.push(x, floorHeightAt(z) + eps * 2, z, x, floorHeightAt(z + 0.25) + eps * 2, Math.min(z1, z + 0.25));
+        major.push(x, this._floor(x, z) + eps * 2, z, x, this._floor(x, z + 0.25) + eps * 2, Math.min(z1, z + 0.25));
       }
     }
     for (let z = Math.ceil(z0); z <= z1; z += c) {
       if (Math.round(z - GRID.originZ) % 5 !== 0) continue;
-      major.push(x0, floorHeightAt(z) + eps * 2, z, x1, floorHeightAt(z) + eps * 2, z);
+      major.push(x0, this._floor(x0, z) + eps * 2, z, x1, this._floor(x1, z) + eps * 2, z);
     }
     const mg = new THREE.BufferGeometry();
     mg.setAttribute('position', new THREE.Float32BufferAttribute(major, 3));
@@ -223,7 +231,7 @@ export class Inspector {
     this.issueGroup.clear();
 
     if (!r.issues.length) {
-      this.dom.issues.innerHTML = `<div class="ins-ok">✓ No floating, buried or overlapping assets.</div>`;
+      this.dom.issues.innerHTML = `<div class="ins-ok">✓ Assets and rendered walkable surfaces agree.</div>`;
     } else {
       const shown = r.issues.slice(0, 60);
       this.dom.issues.innerHTML = shown
@@ -271,7 +279,8 @@ export class Inspector {
     const p = this.player;
     p.mode = 'walk';
     p.seat = null;
-    p.pos.set(worldPos.x, floorHeightAt(worldPos.z), THREE.MathUtils.clamp(worldPos.z + 1.6, L.screenZ + 3.2, L.backZ - 0.9));
+    const z = THREE.MathUtils.clamp(worldPos.z + 1.6, L.screenZ + 3.2, L.backZ - 0.9);
+    p.pos.set(worldPos.x, this._floor(worldPos.x, z), z);
     p.vel.set(0, 0, 0);
     if (asset) {
       const dir = new THREE.Vector3().subVectors(asset.pos, new THREE.Vector3(p.pos.x, p.pos.y + 1.68, p.pos.z));
@@ -285,7 +294,7 @@ export class Inspector {
     if (!this.enabled) return;
 
     const cam = this.camera.position;
-    const lvl = levelAt(cam.z);
+    const lvl = this._level(cam.x, cam.z);
     const g = worldToGrid(cam, lvl);
     this.dom.pos.textContent = `${cam.x.toFixed(2)}, ${cam.y.toFixed(2)}, ${cam.z.toFixed(2)}`;
     this.dom.grid.textContent = gridLabel(g);

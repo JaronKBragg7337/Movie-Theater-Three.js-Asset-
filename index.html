@@ -57,9 +57,10 @@
     <div class="panel-body">
       <div id="video-list"></div>
       <div class="panel-row">
-        <input id="video-url" type="text" placeholder="Paste a video URL (mp4/webm)…" />
+        <input id="video-url" type="url" inputmode="url" autocomplete="url" placeholder="Direct video, YouTube, or TikTok URL…" />
         <button id="load-url-btn">Play URL</button>
       </div>
+      <div id="video-status" role="status" aria-live="polite">Direct media uses the 3D screen; YouTube/TikTok use their official embedded players.</div>
       <div class="panel-row">
         <label for="video-upload" class="upload-label">Upload a video file</label>
         <input id="video-upload" type="file" accept="video/*" />

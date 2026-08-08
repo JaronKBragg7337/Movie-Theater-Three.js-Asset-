@@ -95,7 +95,10 @@ body:not(.playing) #panel-open { display: none; }
 .video-item:hover, .video-item.active { background: rgba(232,194,106,.15); border-color: rgba(232,194,106,.4); }
 .panel-row { display: flex; gap: 8px; align-items: center; }
 #video-url { flex: 1; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15); color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 12.5px; }
+#video-url { user-select: text; }
 #load-url-btn, .upload-label { background: rgba(232,194,106,.18); border: 1px solid rgba(232,194,106,.4); color: #f2e6c8; padding: 8px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#video-status { min-height: 2.7em; color: rgba(242,230,200,.72); font-size: 11px; line-height: 1.35; }
+#video-status.error { color: #ff9ea8; }
 #video-upload { display: none; }
 .transport { gap: 10px; }
 .transport button { background: none; border: none; color: #f2e6c8; font-size: 18px; cursor: pointer; }

@@ -54,6 +54,7 @@ export function parseGridLabel(str) {
 let _seq = 0;
 const byId = new Map();
 const byType = new Map();
+const validators = new Map();
 
 /**
  * Register a logical asset.
@@ -123,6 +124,12 @@ export const registry = {
   },
 };
 
+/** Add a deterministic validation pass to the inspection report. */
+export function registerValidator(name, validator) {
+  validators.set(name, validator);
+  return () => validators.delete(name);
+}
+
 /* ------------------------------------------------------------------ *
  *  VALIDATION — floating / buried / overlap reporting
  * ------------------------------------------------------------------ */
@@ -170,6 +177,19 @@ export function validate() {
           pos: inter.getCenter(new THREE.Vector3()),
         });
       }
+    }
+  }
+
+  for (const [name, validator] of validators) {
+    try {
+      const extra = validator() || [];
+      issues.push(...extra);
+    } catch (error) {
+      issues.push({
+        id: 'VALIDATOR', kind: 'VALIDATION_ERROR', grid: 'L0-H0-R0',
+        detail: `${name}: ${error instanceof Error ? error.message : String(error)}`,
+        pos: new THREE.Vector3(),
+      });
     }
   }
 

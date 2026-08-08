@@ -4,6 +4,7 @@ import { Builder, box3, pierWall } from './builder.js';
 import { roundedBox, roundedRectShape, profileSolid, boltGeom, knurledRing, xf } from './geom.js';
 import { register } from './registry.js';
 import { makeMenuBoard, makeSignFace, makeScreenSign, makePoster } from './textures.js';
+import { createWalkableSurface } from './walkable.js';
 
 /* ------------------------------------------------------------------ *
  *  THE BUILDING — lobby, façade, canopy, forecourt.
@@ -17,6 +18,7 @@ export function buildBuilding(root, M, doorSet) {
   const B = new Builder();
   const colliders = [];
   const emissives = [];
+  const walkables = [];
   const G = L.gradeY;
   const add = (b) => { colliders.push(b); return b; };
 
@@ -26,14 +28,43 @@ export function buildBuilding(root, M, doorSet) {
   const lz0 = L.lobbyZ0, lz1 = L.lobbyZ1, lhw = L.lobbyHalfW;
   const lobbyDepth = lz1 - lz0, lobbyCz = (lz0 + lz1) / 2;
 
-  B.add('terrazzo', xf(new THREE.BoxGeometry(lhw * 2, 0.30, lobbyDepth), { pos: [0, G - 0.15, lobbyCz] }));
-  register('FLOOR', { box: box3(0, G - 0.15, lobbyCz, lhw * 2, 0.3, lobbyDepth), support: G - 0.30, level: 14, solid: false });
+  const lobbyFloor = xf(new THREE.BoxGeometry(lhw * 2, 0.30, lobbyDepth), { pos: [0, G - 0.15, lobbyCz] });
+  B.add('terrazzo', lobbyFloor);
+  const lobbyFloorAsset = register('FLOOR', {
+    box: box3(0, G - 0.15, lobbyCz, lhw * 2, 0.3, lobbyDepth),
+    support: G - 0.30, level: 14, solid: false,
+  });
+  walkables.push(createWalkableSurface(lobbyFloor, lobbyFloorAsset));
 
   // Carpet runners leading to each house door — a real cinema wayfinding cue
   for (const dx of L.audDoors) {
-    B.add('carpet', xf(new THREE.BoxGeometry(3.4, 0.012, 9.0), { pos: [dx, G + 0.006, lz0 + 4.6] }));
+    const runner = xf(new THREE.BoxGeometry(3.4, 0.012, 9.0), { pos: [dx, G + 0.006, lz0 + 4.6] });
+    B.add('carpet', runner);
     B.add('brass', xf(new THREE.BoxGeometry(0.05, 0.016, 9.0), { pos: [dx - 1.72, G + 0.008, lz0 + 4.6] }));
     B.add('brass', xf(new THREE.BoxGeometry(0.05, 0.016, 9.0), { pos: [dx + 1.72, G + 0.008, lz0 + 4.6] }));
+    const runnerAsset = register('RUNNER', {
+      box: box3(dx, G + 0.006, lz0 + 4.6, 3.4, 0.012, 9.0),
+      support: G, level: 14, solid: false,
+    });
+    walkables.push(createWalkableSurface(runner, runnerAsset));
+  }
+
+  // Bridge the previously unmodelled 95 cm between the rear cross-aisle and
+  // the lobby slab. Collision always treated this doorway zone as grade; now
+  // every house door has a visible, raycastable threshold at the same height.
+  for (const dx of L.audDoors) {
+    const depth = L.lobbyZ0 - L.rearDeckEndZ;
+    const cz = (L.lobbyZ0 + L.rearDeckEndZ) / 2;
+    const threshold = xf(
+      new THREE.BoxGeometry(L.audDoorW, 0.06, depth),
+      { pos: [dx, G - 0.03, cz] },
+    );
+    B.add('terrazzo', threshold);
+    const thresholdAsset = register('THRESHOLD', {
+      box: box3(dx, G - 0.03, cz, L.audDoorW, 0.06, depth),
+      support: G - 0.06, level: 14, solid: false,
+    });
+    walkables.push(createWalkableSurface(threshold, thresholdAsset));
   }
 
   // Side walls
@@ -500,8 +531,31 @@ export function buildBuilding(root, M, doorSet) {
   {
     const SB = new Builder();
     const fz = L.facadeZ;
-    SB.add('asphalt', xf(new THREE.BoxGeometry(160, 0.4, 160), { pos: [0, G - 0.22, fz + 40] }));
-    SB.add('concrete', xf(new THREE.BoxGeometry(L.bldgHalfW * 2 + 14, 0.36, 16), { pos: [0, G - 0.18, fz + 8.0] }));
+    // The car-park slab begins at the facade. Its old centre (fz + 40) made
+    // the 160 m slab reach back to z=-6, creating an asphalt "ceiling" through
+    // the rear auditorium at street height.
+    const asphaltDepth = 160;
+    const asphalt = xf(
+      new THREE.BoxGeometry(160, 0.4, asphaltDepth),
+      { pos: [0, G - 0.22, fz + asphaltDepth / 2] },
+    );
+    SB.add('asphalt', asphalt);
+    const asphaltAsset = register('SITEFLOOR', {
+      box: box3(0, G - 0.22, fz + asphaltDepth / 2, 160, 0.4, asphaltDepth),
+      support: G - 0.42, level: 14, solid: false,
+    });
+    walkables.push(createWalkableSurface(asphalt, asphaltAsset));
+
+    const forecourt = xf(
+      new THREE.BoxGeometry(L.bldgHalfW * 2 + 14, 0.36, 16),
+      { pos: [0, G - 0.18, fz + 8.0] },
+    );
+    SB.add('concrete', forecourt);
+    const forecourtAsset = register('SITEFLOOR', {
+      box: box3(0, G - 0.18, fz + 8.0, L.bldgHalfW * 2 + 14, 0.36, 16),
+      support: G - 0.36, level: 14, solid: false,
+    });
+    walkables.push(createWalkableSurface(forecourt, forecourtAsset));
     SB.add('concrete', xf(new THREE.BoxGeometry(L.bldgHalfW * 2 + 14, 0.30, 0.4), { pos: [0, G - 0.16, fz + 16.0] }));
 
     // Bollards guarding the entrance
@@ -553,5 +607,5 @@ export function buildBuilding(root, M, doorSet) {
   }
 
   const meshes = B.flush(root, M, 'building');
-  return { colliders, emissives, meshes, site };
+  return { colliders, emissives, meshes, site, walkables };
 }

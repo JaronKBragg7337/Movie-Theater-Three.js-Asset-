@@ -4,11 +4,13 @@ import { roundedBox, boltGeom, xf } from './geom.js';
 import { register } from './registry.js';
 import { Builder, box3 } from './builder.js';
 import { makeRowPlate, makeExitSign, makePoster } from './textures.js';
+import { createWalkableSurface } from './walkable.js';
 
 export function buildTheater(scene, M) {
   const B = new Builder();
   const colliders = [];
   const emissives = [];
+  const walkables = [];
 
   const addCollider = (b) => { colliders.push(b); return b; };
 
@@ -20,12 +22,16 @@ export function buildTheater(scene, M) {
 
   // Flat apron floor between stage and first riser
   {
-    const g = new THREE.BoxGeometry(deckX, 0.30, frontZ - (L.screenZ + L.stageDepth));
-    B.add('carpet', xf(g, { pos: [0, -0.15, (frontZ + L.screenZ + L.stageDepth) / 2] }));
-    register('FLOOR', {
+    const g = xf(
+      new THREE.BoxGeometry(deckX, 0.30, frontZ - (L.screenZ + L.stageDepth)),
+      { pos: [0, -0.15, (frontZ + L.screenZ + L.stageDepth) / 2] },
+    );
+    B.add('carpet', g);
+    const asset = register('FLOOR', {
       box: box3(0, -0.15, (frontZ + L.screenZ + L.stageDepth) / 2, deckX, 0.3, frontZ - (L.screenZ + L.stageDepth)),
       support: -0.30, level: 0, solid: false,
     });
+    walkables.push(createWalkableSurface(g, asset));
   }
 
   // One riser platform per row, with a concrete face and a brass nosing
@@ -35,8 +41,8 @@ export function buildTheater(scene, M) {
     const depth = L.rowPitch;
     const cz = z0 + depth / 2;
 
-    const top = new THREE.BoxGeometry(deckX, 0.06, depth);
-    B.add('carpet', xf(top, { pos: [0, y - 0.03, cz] }));
+    const top = xf(new THREE.BoxGeometry(deckX, 0.06, depth), { pos: [0, y - 0.03, cz] });
+    B.add('carpet', top);
 
     if (y > 0.001) {
       const faceH = L.riserStep + 0.06;
@@ -57,7 +63,7 @@ export function buildTheater(scene, M) {
       B.add('concrete', xf(fill, { pos: [0, y / 2 - 0.03, cz + 0.03] }));
     }
 
-    register('RISER', {
+    const asset = register('RISER', {
       box: box3(0, y - 0.03, cz, deckX, 0.06, depth),
       pos: new THREE.Vector3(0, y, cz),
       support: y - 0.06,
@@ -65,6 +71,7 @@ export function buildTheater(scene, M) {
       solid: false,
       meta: { row: ROW_LETTERS[r] },
     });
+    walkables.push(createWalkableSurface(top, asset));
 
     // Aisle step LEDs — recessed strip washing each tread, both aisles
     if (y > 0.001) {
@@ -85,9 +92,19 @@ export function buildTheater(scene, M) {
   {
     const y = rowY(L.rows - 1);
     const backStart = rowZ(L.rows - 1) + L.rowPitch / 2;
-    const d = L.backZ - 0.4 - backStart;
-    B.add('carpet', xf(new THREE.BoxGeometry(deckX, 0.06, d), { pos: [0, y - 0.03, backStart + d / 2] }));
+    const d = L.rearDeckEndZ - backStart;
+    const top = xf(new THREE.BoxGeometry(deckX, 0.06, d), { pos: [0, y - 0.03, backStart + d / 2] });
+    B.add('carpet', top);
     B.add('concrete', xf(new THREE.BoxGeometry(deckX, y, d), { pos: [0, y / 2 - 0.03, backStart + d / 2] }));
+    const asset = register('RISER', {
+      box: box3(0, y - 0.03, backStart + d / 2, deckX, 0.06, d),
+      pos: new THREE.Vector3(0, y, backStart + d / 2),
+      support: y - 0.06,
+      level: rowLevel(L.rows - 1),
+      solid: false,
+      meta: { row: 'CROSS-AISLE' },
+    });
+    walkables.push(createWalkableSurface(top, asset));
   }
 
   /* ============================================================ *
@@ -293,14 +310,19 @@ export function buildTheater(scene, M) {
 
     // Stage / apron with a moulded fascia and tread nosing
     const sd = L.stageDepth;
-    B.add('wood', xf(new THREE.BoxGeometry(L.halfWidth * 2 - 2, L.stageY, sd), { pos: [0, L.stageY / 2, z + sd / 2] }));
+    const stageDeck = xf(
+      new THREE.BoxGeometry(L.halfWidth * 2 - 2, L.stageY, sd),
+      { pos: [0, L.stageY / 2, z + sd / 2] },
+    );
+    B.add('wood', stageDeck);
     B.add('brass', xf(new THREE.CylinderGeometry(0.03, 0.03, L.halfWidth * 2 - 2, 10).rotateZ(Math.PI / 2), { pos: [0, L.stageY - 0.015, z + sd] }));
     B.add('wood', xf(new THREE.BoxGeometry(L.halfWidth * 2 - 2, 0.18, 0.1), { pos: [0, L.stageY - 0.4, z + sd + 0.05] }));
     addCollider(box3(0, L.stageY / 2, z + sd / 2, L.halfWidth * 2 - 2, L.stageY, sd));
-    register('STAGE', {
+    const stageAsset = register('STAGE', {
       box: box3(0, L.stageY / 2, z + sd / 2, L.halfWidth * 2 - 2, L.stageY, sd),
       support: 0, level: -1,
     });
+    walkables.push(createWalkableSurface(stageDeck, stageAsset, { compareLayout: false }));
 
     // Proscenium arch: stepped reveal, fluted jambs, ornamental frieze
     const pw = L.proscHalfWidth, pt = L.proscTop;
@@ -543,5 +565,5 @@ export function buildTheater(scene, M) {
   }
 
   const meshes = B.flush(scene, M, 'theater');
-  return { colliders, emissives, meshes };
+  return { colliders, emissives, meshes, walkables };
 }

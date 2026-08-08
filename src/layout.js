@@ -44,6 +44,7 @@ L.seatsPerRow = L.blockLeft + L.blockCentre + L.blockRight;
 L.seatingWidth = L.seatsPerRow * L.seatPitch + 2 * L.aisleW;
 L.seatingHalf = L.seatingWidth / 2;
 L.lastRowZ = L.firstRowZ + (L.rows - 1) * L.rowPitch;
+L.rearDeckEndZ = L.backZ - 0.4;
 
 /* ---------------- Building beyond the auditorium ----------------
  * The auditorium floor rakes down below street level, exactly as in a real

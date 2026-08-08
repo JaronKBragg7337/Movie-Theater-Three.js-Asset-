@@ -9,9 +9,10 @@ const ACCEL = 16;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
 
 export class Player {
-  constructor(camera, colliders) {
+  constructor(camera, colliders, walkable = null) {
     this.camera = camera;
     this.colliders = colliders;
+    this.walkable = walkable;
     this.pos = new THREE.Vector3(0, 0, 6.5);
     this.vel = new THREE.Vector3();
     this.yaw = 0;            // rotation.y = 0 looks down -Z, toward the screen
@@ -30,9 +31,17 @@ export class Player {
 
   setColliders(list) { this.colliders = list; }
 
+  floorAt(x, z) {
+    return this.walkable?.heightAt(x, z) ?? floorHeightAt(z);
+  }
+
   /** Slide-along-surface AABB resolution, one axis at a time. */
   _collide(next) {
-    const feet = floorHeightAt(next.z);
+    // Use the lower of the current and candidate floors while resolving
+    // vertical overlap. Otherwise a tall obstacle with a walkable top (the
+    // 1.1 m stage) would exclude itself after the height query and let the
+    // player snap straight up through its collider.
+    const feet = Math.min(this.pos.y, this.floorAt(next.x, next.z));
     const lo = feet + 0.25, hi = feet + EYE;
     for (const b of this.colliders) {
       if (b.max.y < lo || b.min.y > hi) continue;
@@ -73,7 +82,8 @@ export class Player {
 
   stand() {
     if (!this.seat) return;
-    this.pos.set(this.seat.pos.x, this.seat.floorY, this.seat.pos.z - 0.72);
+    const z = this.seat.pos.z - 0.72;
+    this.pos.set(this.seat.pos.x, this.floorAt(this.seat.pos.x, z), z);
     this.mode = 'walk';
     this.seat = null;
     this.seatBlend = 0;
@@ -124,7 +134,7 @@ export class Player {
     next.z += this.vel.z * dt;
     this._collide(next);
     this.pos.copy(next);
-    this.pos.y = floorHeightAt(this.pos.z);
+    this.pos.y = this.floorAt(this.pos.x, this.pos.z);
 
     // Head bob, scaled by actual ground speed
     const sp = Math.hypot(this.vel.x, this.vel.z);
