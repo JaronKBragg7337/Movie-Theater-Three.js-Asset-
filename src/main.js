@@ -26,7 +26,7 @@ const step = (msg) => new Promise((res) => {
   setTimeout(res, 12);
 });
 
-const isMobile = matchMedia('(hover:none) and (pointer:coarse)').matches;
+const isMobile = matchMedia('(hover:none) and (pointer:coarse)').matches || navigator.maxTouchPoints > 0;
 
 /* ================================================================== *
  *  RENDERER
@@ -464,6 +464,7 @@ function writeHinge(meshes, i, rec) {
 
   const inspector = new Inspector(scene, camera, player, staticColliders, walkable);
   input.onToggleInspect = () => inspector.toggle();
+  document.getElementById('inspect-btn').addEventListener('click', () => inspector.toggle());
 
   /* ---- interaction: doors and seats share one action ---- */
   const promptEl = document.getElementById('prompt');
@@ -515,6 +516,7 @@ function writeHinge(meshes, i, rec) {
   const list = document.getElementById('video-list');
   const videoStatus = document.getElementById('video-status');
   const muteBtn = document.getElementById('mute-btn');
+  const embedInputBtn = document.getElementById('embed-input-btn');
   const setVideoStatus = (message, isError = false) => {
     videoStatus.textContent = message;
     videoStatus.classList.toggle('error', isError);
@@ -539,16 +541,45 @@ function writeHinge(meshes, i, rec) {
     list.appendChild(d);
     void i;
   });
-  const openBtn = document.getElementById('panel-open');
   const showPanel = (v) => {
     panel.classList.toggle('hidden', !v);
-    openBtn.style.display = v ? 'none' : '';
+    document.body.classList.toggle('panel-open', v);
     if (v && document.pointerLockElement) document.exitPointerLock();
   };
-  openBtn.style.display = '';
-  openBtn.addEventListener('click', () => showPanel(true));
   document.getElementById('menu-btn').addEventListener('click', () => showPanel(true));
   document.getElementById('panel-close').addEventListener('click', () => showPanel(false));
+  input.onToggleVideo = () => showPanel(panel.classList.contains('hidden'));
+
+  let hudMode = '';
+  const syncEmbedInputButton = () => {
+    const isEmbed = screen.state.source === 'embed';
+    const interactive = isEmbed && screen.state.embedInteractive;
+    const mode = `${isEmbed}:${interactive}`;
+    if (mode === hudMode) return;
+    hudMode = mode;
+    embedInputBtn.hidden = !isEmbed;
+    if (!isEmbed) return;
+    embedInputBtn.textContent = interactive ? 'LOOK' : 'PLAYER';
+    embedInputBtn.classList.toggle('player-active', interactive);
+    embedInputBtn.setAttribute('aria-pressed', String(interactive));
+    embedInputBtn.setAttribute('aria-label', interactive
+      ? 'Return touch control to the camera'
+      : 'Enable embedded video player controls');
+    embedInputBtn.title = interactive
+      ? 'Return control to camera look (I)'
+      : 'Enable embedded video controls (I)';
+  };
+  const toggleEmbedInput = () => {
+    if (screen.state.source !== 'embed') return;
+    const interactive = screen.setEmbedInteractive(!screen.state.embedInteractive);
+    hudMode = '';
+    syncEmbedInputButton();
+    setVideoStatus(interactive
+      ? 'Player controls enabled · tap LOOK when finished'
+      : 'Camera look restored · tap PLAYER to use video controls again');
+  };
+  embedInputBtn.addEventListener('click', toggleEmbedInput);
+  input.onToggleScreenInput = toggleEmbedInput;
   document.getElementById('load-url-btn').addEventListener('click', async () => {
     const u = document.getElementById('video-url').value.trim();
     if (!u) return;
@@ -558,8 +589,8 @@ function writeHinge(meshes, i, rec) {
       const selected = await screen.loadUrl(u);
       if (selected.kind === 'embed') {
         setVideoStatus(selected.provider === 'youtube'
-          ? 'YouTube ready · tap Play on the movie screen for sound · neutral auditorium spill'
-          : 'TikTok official embedded player · neutral auditorium spill');
+          ? 'YouTube ready · tap Play once for sound; camera control then returns automatically · neutral auditorium spill'
+          : 'TikTok player ready · tap LOOK after using its controls · neutral auditorium spill');
       } else {
         setVideoStatus(`Direct media · ${selected.label || selected.type} · rendered VideoTexture verified`);
       }
@@ -636,6 +667,7 @@ function writeHinge(meshes, i, rec) {
     player.update(dt);
     screen.update(dt);
     screen.updateEmbedVisibility(camera, player.colliders);
+    syncEmbedInputButton();
 
     lightTimer -= dt;
     if (lightTimer <= 0) { lightTimer = 0.12; updateLightPool(camera.position); }
@@ -655,9 +687,9 @@ function writeHinge(meshes, i, rec) {
     // Contextual prompt: doors take priority over seats
     nearDoor = player.mode === 'seated' ? null : doorSet.nearest(player.pos, 2.6);
     nearSeat = findNearSeat();
-    const key = input.isTouch ? 'tap the button' : 'press E';
+    const key = input.isTouch ? 'tap USE' : 'press E or click USE';
     if (player.mode === 'seated') {
-      promptEl.textContent = input.isTouch ? 'Tap the button to stand up' : 'Esc or E to stand up';
+      promptEl.textContent = input.isTouch ? 'Tap USE to stand up' : 'Esc, E, or click USE to stand up';
       actionBtn.textContent = 'STAND';
       promptEl.classList.add('show');
     } else if (nearDoor) {
@@ -669,7 +701,7 @@ function writeHinge(meshes, i, rec) {
       actionBtn.textContent = 'SIT';
       promptEl.classList.add('show');
     } else {
-      actionBtn.textContent = 'SIT';
+      actionBtn.textContent = 'USE';
       promptEl.classList.remove('show');
     }
 
@@ -698,7 +730,7 @@ function writeHinge(meshes, i, rec) {
   // Public API — also what an agent drives from the console.
   window.THEATER = {
     root, scene, camera, renderer,
-    player, screen, inspector, registry, doorSet, walkable,
+    player, input, screen, inspector, registry, doorSet, walkable,
     playlist: PLAYLIST,
     seats: seating.seats,
     site: building.site,
@@ -715,6 +747,7 @@ function writeHinge(meshes, i, rec) {
     removeTestEnvironment: () => { building.site.removeFromParent(); },
     validateWalkables,
     playBuiltIn: (index = 0) => screen.load(PLAYLIST[index]?.sources || PLAYLIST[0].sources, PLAYLIST[index]?.title || PLAYLIST[0].title),
+    showMediaPanel: showPanel,
     report: () => inspector.refreshReport(),
   };
 })();

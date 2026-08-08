@@ -35,10 +35,15 @@ building is one scene.
 | Walk | `W A S D` / arrows | Left half of screen — drag anywhere |
 | Look | Mouse (pointer lock) | Right half of screen — drag |
 | Run | `Shift` | Push the stick to the edge |
-| Open door / sit | `E` | On-screen action button |
-| Stand up | `Esc` or `E` | Action button |
-| Inspection layer | `G` | — |
-| Video panel | 🎬 button | ⚙ button |
+| Open door / sit | `E` or **USE** | **USE** button |
+| Stand up | `Esc`, `E`, or **USE** | **USE** button |
+| Inspection layer | `G` or **GRID** | **GRID** button |
+| Video panel | `M` or **MEDIA** | **MEDIA** button |
+| Embedded player / camera input | `I`, **PLAYER**, or **LOOK** | **PLAYER** or **LOOK** |
+
+The **USE**, **GRID**, and **MEDIA** HUD buttons are present on both desktop
+and mobile. On desktop, press `Esc` to release the mouse whenever you want to
+click them; the keyboard shortcuts continue to work while pointer lock is on.
 
 The mobile joystick is **invisible until touched**. Put a finger down anywhere
 on the left 45% of the screen and the stick materialises under it; lift and it
@@ -65,6 +70,12 @@ frame, so it is never black) and accepts:
   frames to WebGL, provider embeds deliberately use neutral screen spill.
   YouTube starts cued and unmuted: tap its native Play control to begin with
   sound. This extra in-player gesture is required by iPhone autoplay policy.
+  While the provider controls are active, the HUD shows **LOOK**. As soon as
+  YouTube begins playing, the iframe releases touch input back to the theater
+  automatically, preventing its embedded page from stealing camera swipes or
+  triggering a double-tap viewport zoom. Tap **PLAYER** whenever you want the
+  provider controls again, then **LOOK** to return to the camera. TikTok uses
+  the same explicit PLAYER/LOOK switch.
 - **Local upload** — pick a file; it plays from a blob URL.
 
 For direct URLs, the CORS header matters: the auditorium lighting is driven by
@@ -270,10 +281,12 @@ npm ci
 npm test
 ```
 
-The browser suite checks the full rendered walkable-surface report, the mobile
-forward/back convention, official-provider embed isolation/occlusion, and the
-actual H.264 decode → `VideoTexture` → WebGL path for Big Buck Bunny, Sintel,
-and Tears of Steel. A successful media URL response alone does not pass.
+The browser suite checks the full rendered walkable-surface report, desktop
+and mobile HUD parity, double-tap zoom suppression, touch-drag camera ownership,
+interrupted-touch recovery, the mobile forward/back convention, provider
+embed isolation/occlusion/input handoff, and the actual H.264 decode →
+`VideoTexture` → WebGL path for Big Buck Bunny, Sintel, and Tears of Steel. A
+successful media URL response alone does not pass.
 
 ---
 

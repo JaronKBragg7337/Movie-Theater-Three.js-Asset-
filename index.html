@@ -27,7 +27,7 @@
     <div class="ctp-card">
       <h1>Grand Palace Cinema</h1>
       <p>Click to enter &middot; WASD / Arrows to walk &middot; Mouse to look<br/>
-      Walk up to a seat and press <b>E</b> to sit &middot; <b>Esc</b> to stand</p>
+      <b>E</b> use &middot; <b>G</b> grid &middot; <b>M</b> media &middot; <b>I</b> screen controls</p>
       <button id="enter-btn">Enter Theater</button>
     </div>
   </div>
@@ -42,10 +42,12 @@
   <!-- Mobile look zone (right half) -->
   <div id="look-zone"></div>
 
-  <!-- Mobile sit/stand + video button -->
+  <!-- Universal touch/click HUD — the same actions are available on phone and PC -->
   <div id="mobile-buttons">
-    <button id="sit-btn" class="round-btn">SIT</button>
-    <button id="menu-btn" class="round-btn">⚙</button>
+    <button id="sit-btn" class="round-btn" type="button" aria-label="Use nearby door or seat" title="Use nearby door or seat (E)">USE</button>
+    <button id="inspect-btn" class="round-btn" type="button" aria-label="Toggle inspection grid" title="Toggle inspection grid (G)">GRID</button>
+    <button id="embed-input-btn" class="round-btn" type="button" aria-label="Return touch control to the camera" title="Return control to camera look (I)" hidden>LOOK</button>
+    <button id="menu-btn" class="round-btn" type="button" aria-label="Open media controls" title="Open media controls (M)">MEDIA</button>
   </div>
 
   <!-- Screen / video control panel -->
@@ -72,8 +74,6 @@
       </div>
     </div>
   </div>
-
-  <button id="panel-open" class="round-btn">🎬</button>
 
   <script type="importmap">
   {

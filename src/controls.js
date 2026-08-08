@@ -163,14 +163,35 @@ export function bindInput(player, dom) {
   const isTouch = matchMedia('(hover:none) and (pointer:coarse)').matches || navigator.maxTouchPoints > 0;
   document.body.classList.toggle('is-touch', isTouch);
 
-  const state = { locked: false, playing: false, isTouch, onAction: null, onToggleInspect: null };
+  const state = {
+    locked: false,
+    playing: false,
+    isTouch,
+    onAction: null,
+    onToggleInspect: null,
+    onToggleVideo: null,
+    onToggleScreenInput: null,
+  };
+
+  // Safari exposes legacy gesture events in addition to pointer events. The
+  // theater is a full-screen game surface, so viewport pinch/double-tap zoom
+  // is never useful here. (Touches inside a cross-origin provider iframe are
+  // handled separately by VideoScreen's explicit PLAYER / LOOK ownership.)
+  if (isTouch) {
+    const preventViewportGesture = (event) => event.preventDefault();
+    document.addEventListener('gesturestart', preventViewportGesture, { passive: false });
+    document.addEventListener('gesturechange', preventViewportGesture, { passive: false });
+    document.addEventListener('gestureend', preventViewportGesture, { passive: false });
+  }
 
   /* ---- keyboard ---- */
   addEventListener('keydown', (e) => {
-    if (e.target instanceof HTMLInputElement) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target?.isContentEditable) return;
     player.keys.add(e.code);
     if (e.code === 'KeyE' || e.code === 'Space') { e.preventDefault(); state.onAction?.(); }
     if (e.code === 'KeyG') { e.preventDefault(); state.onToggleInspect?.(); }
+    if (e.code === 'KeyM') { e.preventDefault(); state.onToggleVideo?.(); }
+    if (e.code === 'KeyI') { e.preventDefault(); state.onToggleScreenInput?.(); }
     if (e.code === 'Escape' && player.mode === 'seated') player.stand();
   });
   addEventListener('keyup', (e) => player.keys.delete(e.code));
@@ -185,9 +206,10 @@ export function bindInput(player, dom) {
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('pointerlockchange', () => {
     state.locked = document.pointerLockElement === canvas;
+    document.body.classList.toggle('pointer-locked', state.locked);
     if (!state.locked && !isTouch && state.playing) {
       clickToPlay.classList.remove('hidden');
-      document.body.classList.remove('playing');
+      dom.enterBtn.textContent = 'Resume Theater';
     }
   });
 
@@ -195,6 +217,7 @@ export function bindInput(player, dom) {
     clickToPlay.classList.add('hidden');
     document.body.classList.add('playing');
     state.playing = true;
+    dom.enterBtn.textContent = 'Resume Theater';
     if (!isTouch) canvas.requestPointerLock();
   };
   clickToPlay.addEventListener('click', start);
@@ -207,6 +230,7 @@ export function bindInput(player, dom) {
 
   joyZone.addEventListener('pointerdown', (e) => {
     if (joyId !== null) return;
+    e.preventDefault();
     joyId = e.pointerId;
     joyZone.setPointerCapture(e.pointerId);
     joyOrigin.set(e.clientX, e.clientY);
@@ -217,6 +241,7 @@ export function bindInput(player, dom) {
   });
   joyZone.addEventListener('pointermove', (e) => {
     if (e.pointerId !== joyId) return;
+    e.preventDefault();
     let dx = e.clientX - joyOrigin.x;
     let dy = e.clientY - joyOrigin.y;
     const d = Math.hypot(dx, dy);
@@ -238,18 +263,21 @@ export function bindInput(player, dom) {
   };
   joyZone.addEventListener('pointerup', endJoy);
   joyZone.addEventListener('pointercancel', endJoy);
+  joyZone.addEventListener('lostpointercapture', endJoy);
 
   /* ---- touch: right look ---- */
   let lookId = null;
   const lookPrev = new THREE.Vector2();
   lookZone.addEventListener('pointerdown', (e) => {
     if (lookId !== null) return;
+    e.preventDefault();
     lookId = e.pointerId;
     lookZone.setPointerCapture(e.pointerId);
     lookPrev.set(e.clientX, e.clientY);
   });
   lookZone.addEventListener('pointermove', (e) => {
     if (e.pointerId !== lookId) return;
+    e.preventDefault();
     player.look.x += (e.clientX - lookPrev.x) * 0.0042;
     player.look.y += (e.clientY - lookPrev.y) * 0.0042;
     lookPrev.set(e.clientX, e.clientY);
@@ -257,6 +285,20 @@ export function bindInput(player, dom) {
   const endLook = (e) => { if (e.pointerId === lookId) lookId = null; };
   lookZone.addEventListener('pointerup', endLook);
   lookZone.addEventListener('pointercancel', endLook);
+  lookZone.addEventListener('lostpointercapture', endLook);
+
+  const resetTouch = () => {
+    joyId = null;
+    lookId = null;
+    joyBase.classList.remove('active');
+    joyNub.style.transform = 'translate(0,0)';
+    player.move.set(0, 0);
+    player.look.set(0, 0);
+    player.run = false;
+  };
+  addEventListener('blur', resetTouch);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) resetTouch(); });
+  state.resetTouch = resetTouch;
 
   return state;
 }

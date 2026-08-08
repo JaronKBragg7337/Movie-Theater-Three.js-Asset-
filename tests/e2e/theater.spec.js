@@ -130,12 +130,20 @@ test('provider URLs are cued unmuted for native playback and neutral spill', asy
     player.keys.clear();
     player.move.set(0, 0);
     player.vel.set(0, 0, 0);
-    player.pos.set(0, THEATER.walkable.heightAt(0, -12), -12);
+    // Load from the lobby, where the physical screen is occluded. The
+    // provider controller must still become ready before we walk inside.
+    player.pos.set(0, THEATER.walkable.heightAt(0, 20), 20);
     player.yaw = 0;
-    player.pitch = 0.18;
+    player.pitch = 0;
     player.update(0.016);
     THEATER.camera.updateMatrixWorld(true);
     const youtube = await THEATER.screen.loadUrl('https://www.youtube.com/watch?v=M7lc1UVf-VE&t=3s');
+    THEATER.screen.updateEmbedVisibility(THEATER.camera, THEATER.player.colliders);
+    const visibleThroughLobbyWall = THEATER.screen.embedObject.visible;
+    player.pos.set(0, THEATER.walkable.heightAt(0, -12), -12);
+    player.pitch = 0.18;
+    player.update(0.016);
+    THEATER.camera.updateMatrixWorld(true);
     THEATER.screen.updateEmbedVisibility(THEATER.camera, THEATER.player.colliders);
     const visibleInHouse = THEATER.screen.embedObject.visible;
     const controller = THEATER.screen.youtubePlayer;
@@ -146,8 +154,12 @@ test('provider URLs are cued unmuted for native playback and neutral spill', asy
       neutralMode: THEATER.screen.state.renderCheck?.mode,
       textureAttached: THEATER.screen.material.map === THEATER.screen.videoTexture,
       visibleInHouse,
+      visibleThroughLobbyWall,
       providerReady: THEATER.screen.state.providerReady,
       needsUserGesture: THEATER.screen.state.needsUserGesture,
+      embedInteractive: THEATER.screen.state.embedInteractive,
+      holderPointerEvents: THEATER.screen.embedObject.element.style.pointerEvents,
+      iframePointerEvents: THEATER.screen.embedIframe.style.pointerEvents,
       muted: controller?.isMuted(),
       volume: controller?.getVolume(),
       playerState: controller?.getPlayerState(),
@@ -176,10 +188,27 @@ test('provider URLs are cued unmuted for native playback and neutral spill', asy
   expect(initial.neutralMode).toBe('provider-embed-neutral-spill');
   expect(initial.textureAttached).toBe(false);
   expect(initial.visibleInHouse).toBe(true);
+  expect(initial.visibleThroughLobbyWall).toBe(false);
   expect(initial.providerReady).toBe(true);
   expect(initial.needsUserGesture).toBe(true);
+  expect(initial.embedInteractive).toBe(true);
+  expect(initial.holderPointerEvents).toBe('auto');
+  expect(initial.iframePointerEvents).toBe('auto');
   expect(initial.muted).toBe(false);
   expect(initial.volume).toBe(100);
   expect([2, 5]).toContain(initial.playerState);
   expect(afterLoad.visibleThroughLobbyWall).toBe(false);
+
+  const worldInput = await page.evaluate(() => ({
+    enabled: THEATER.screen.setEmbedInteractive(false),
+    state: THEATER.screen.state.embedInteractive,
+    holderPointerEvents: THEATER.screen.embedObject.element.style.pointerEvents,
+    iframePointerEvents: THEATER.screen.embedIframe.style.pointerEvents,
+  }));
+  expect(worldInput).toEqual({
+    enabled: false,
+    state: false,
+    holderPointerEvents: 'none',
+    iframePointerEvents: 'none',
+  });
 });

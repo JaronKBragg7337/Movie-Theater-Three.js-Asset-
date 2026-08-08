@@ -225,6 +225,8 @@ export class VideoScreen {
     this.embedIframe = null;
     this.embedProvider = null;
     this.youtubePlayer = null;
+    this._embedInitializing = false;
+    this._embedInputReleaseTimer = null;
     this._embedTarget = new THREE.Vector3();
     this._embedDirection = new THREE.Vector3();
     this._embedHit = new THREE.Vector3();
@@ -300,6 +302,7 @@ export class VideoScreen {
       renderCheck: null,
       providerReady: false,
       needsUserGesture: false,
+      embedInteractive: false,
       error: null,
     };
   }
@@ -380,6 +383,8 @@ export class VideoScreen {
   }
 
   _clearEmbed() {
+    clearTimeout(this._embedInputReleaseTimer);
+    this._embedInputReleaseTimer = null;
     if (this.youtubePlayer) {
       try { this.youtubePlayer.destroy(); } catch { /* already detached */ }
     }
@@ -389,6 +394,44 @@ export class VideoScreen {
     this.embedObject = null;
     this.embedIframe = null;
     this.embedProvider = null;
+    this._embedInitializing = false;
+    if (this.state) this.state.embedInteractive = false;
+  }
+
+  /** Decide whether the provider iframe or the world receives pointer input. */
+  setEmbedInteractive(enabled) {
+    const interactive = Boolean(enabled && this.embedObject && this.embedIframe);
+    const pointerEvents = interactive && !this._embedInitializing ? 'auto' : 'none';
+    if (this.embedObject?.element) {
+      this.embedObject.element.style.pointerEvents = pointerEvents;
+      this.embedObject.element.dataset.inputOwner = interactive ? 'player' : 'world';
+    }
+    if (this.embedIframe) {
+      this.embedIframe.style.pointerEvents = pointerEvents;
+      this.embedIframe.tabIndex = interactive ? 0 : -1;
+      if (!interactive) this.embedIframe.blur();
+    }
+    if (this.state) this.state.embedInteractive = interactive;
+    return interactive;
+  }
+
+  _finishEmbedInitialization() {
+    if (!this._embedInitializing) return;
+    this._embedInitializing = false;
+    if (this.embedObject?.element) this.embedObject.element.style.opacity = '1';
+    if (this.embedObject) this.embedObject.visible = false;
+    this.setEmbedInteractive(this.state.embedInteractive);
+  }
+
+  _returnInputToWorldAfterPlayback() {
+    if (this._embedInputReleaseTimer !== null || !this.state.embedInteractive) return;
+    // Run after the provider's current pointer event has completed. The next
+    // tap/drag then lands on the theater's look zone instead of becoming an
+    // iframe double-tap zoom or pan gesture.
+    this._embedInputReleaseTimer = setTimeout(() => {
+      this._embedInputReleaseTimer = null;
+      if (this.state.source === 'embed') this.setEmbedInteractive(false);
+    }, 0);
   }
 
   _showLeader(title = 'Countdown Leader') {
@@ -407,6 +450,7 @@ export class VideoScreen {
       renderCheck: null,
       providerReady: false,
       needsUserGesture: false,
+      embedInteractive: false,
     });
   }
 
@@ -446,6 +490,7 @@ export class VideoScreen {
       sampling: true,
       providerReady: false,
       needsUserGesture: false,
+      embedInteractive: false,
       error: null,
     });
     this.videoTexture.needsUpdate = true;
@@ -508,17 +553,19 @@ export class VideoScreen {
     this.video.pause();
     this._clearEmbed();
 
+    const youtube = source.provider === 'youtube';
     const frame = document.createElement('iframe');
     frame.src = embedUrlFor(source);
     frame.title = `${source.provider === 'youtube' ? 'YouTube' : 'TikTok'} embedded player`;
     frame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
     frame.allowFullscreen = true;
     frame.referrerPolicy = 'strict-origin-when-cross-origin';
-    frame.style.cssText = 'display:block;width:1280px;height:536px;border:0;background:#111;pointer-events:auto';
+    frame.style.cssText = 'display:block;width:1280px;height:536px;border:0;background:#111;pointer-events:auto;touch-action:manipulation';
 
     const holder = document.createElement('div');
     holder.className = 'theater-embed-player';
-    holder.style.cssText = 'width:1280px;height:536px;background:#111;overflow:hidden;pointer-events:auto';
+    holder.style.cssText = 'width:1280px;height:536px;background:#111;overflow:hidden;pointer-events:auto;touch-action:manipulation';
+    if (youtube) holder.style.opacity = '0';
     holder.appendChild(frame);
 
     const object = new CSS3DObject(holder);
@@ -526,17 +573,20 @@ export class VideoScreen {
     object.position.copy(this.mesh.position);
     object.position.z += 0.035;
     object.scale.setScalar(L.screenW / 1280);
-    object.visible = false;
+    // A display:none iframe may never emit YouTube's ready event on iOS.
+    // Keep it laid out but transparent/non-interactive during initialization;
+    // normal camera occlusion takes over immediately after readiness.
+    object.visible = youtube;
     this.scene.add(object);
 
     this.embedObject = object;
     this.embedIframe = frame;
     this.embedProvider = source.provider;
+    this._embedInitializing = youtube;
     this.material.map = null;
     this.material.color.setHex(0x181a20);
     this.material.needsUpdate = true;
     this._resetSampler();
-    const youtube = source.provider === 'youtube';
     Object.assign(this.state, {
       // YouTube starts cued and unmuted. Audible autoplay is intentionally
       // avoided so an iPhone tap inside the provider player can satisfy the
@@ -551,8 +601,10 @@ export class VideoScreen {
       renderCheck: { ok: true, mode: 'provider-embed-neutral-spill' },
       providerReady: !youtube,
       needsUserGesture: youtube,
+      embedInteractive: true,
       error: null,
     });
+    this.setEmbedInteractive(true);
 
     let controller = 'native-iframe';
     if (youtube) {
@@ -564,6 +616,8 @@ export class VideoScreen {
         // controller is unavailable; its own Play control is the audio-safe
         // path on iPhone in either case.
         console.warn('[screen] YouTube controller unavailable:', error);
+      } finally {
+        if (token === this._loadToken && this.embedProvider === source.provider) this._finishEmbedInitialization();
       }
     }
     return { ...source, embedUrl: this.embedIframe?.src || frame.src, controller };
@@ -594,7 +648,8 @@ export class VideoScreen {
             }
             this.youtubePlayer = event.target;
             this.embedIframe = event.target.getIframe();
-            this.embedIframe.style.cssText = 'display:block;width:1280px;height:536px;border:0;background:#111;pointer-events:auto';
+            this.embedIframe.style.cssText = 'display:block;width:1280px;height:536px;border:0;background:#111;touch-action:manipulation';
+            this.setEmbedInteractive(this.state.embedInteractive);
             // Safe because playback is still cued. A later native Play tap
             // starts audible media without Safari pausing it.
             event.target.unMute();
@@ -610,12 +665,15 @@ export class VideoScreen {
           onStateChange: (event) => {
             if (event.target !== this.youtubePlayer) return;
             const active = event.data === YT.PlayerState.PLAYING || event.data === YT.PlayerState.BUFFERING;
+            const firstAudibleStart = active && this.state.needsUserGesture;
             this.state.playing = active;
             if (event.data === YT.PlayerState.PLAYING) this.state.needsUserGesture = false;
+            if (firstAudibleStart) this._returnInputToWorldAfterPlayback();
           },
           onAutoplayBlocked: () => {
             this.state.playing = false;
             this.state.needsUserGesture = true;
+            this.setEmbedInteractive(true);
           },
           onError: (event) => {
             const error = new Error(`YouTube player error ${event.data}.`);
@@ -687,6 +745,10 @@ export class VideoScreen {
   /** Hide the DOM player when a wall blocks the physical cinema screen. */
   updateEmbedVisibility(camera, colliders = []) {
     if (!this.embedObject) return;
+    if (this._embedInitializing) {
+      this.embedObject.visible = true;
+      return;
+    }
     this.mesh.getWorldPosition(this._embedTarget);
     this._embedDirection.subVectors(this._embedTarget, camera.position);
     const distance = this._embedDirection.length();
