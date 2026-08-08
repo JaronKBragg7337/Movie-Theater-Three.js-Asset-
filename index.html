@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Grand Palace Cinema — Three.js</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="loading">
+    <div class="loading-card">
+      <div class="reel"></div>
+      <div id="loading-text">Dimming the house lights…</div>
+    </div>
+  </div>
+
+  <!-- Crosshair -->
+  <div id="crosshair"></div>
+
+  <!-- HUD prompt (E / tap to sit, etc.) -->
+  <div id="prompt"></div>
+
+  <!-- Desktop: click to enter pointer lock -->
+  <div id="click-to-play">
+    <div class="ctp-card">
+      <h1>Grand Palace Cinema</h1>
+      <p>Click to enter &middot; WASD / Arrows to walk &middot; Mouse to look<br/>
+      Walk up to a seat and press <b>E</b> to sit &middot; <b>Esc</b> to stand</p>
+      <button id="enter-btn">Enter Theater</button>
+    </div>
+  </div>
+
+  <!-- Mobile virtual joystick zone (left half) — invisible until touched -->
+  <div id="joystick-zone">
+    <div id="joystick-base">
+      <div id="joystick-nub"></div>
+    </div>
+  </div>
+
+  <!-- Mobile look zone (right half) -->
+  <div id="look-zone"></div>
+
+  <!-- Mobile sit/stand + video button -->
+  <div id="mobile-buttons">
+    <button id="sit-btn" class="round-btn">SIT</button>
+    <button id="menu-btn" class="round-btn">⚙</button>
+  </div>
+
+  <!-- Screen / video control panel -->
+  <div id="video-panel" class="hidden">
+    <div class="panel-header">
+      <span>Now Showing</span>
+      <button id="panel-close">✕</button>
+    </div>
+    <div class="panel-body">
+      <div id="video-list"></div>
+      <div class="panel-row">
+        <input id="video-url" type="text" placeholder="Paste a video URL (mp4/webm)…" />
+        <button id="load-url-btn">Play URL</button>
+      </div>
+      <div class="panel-row">
+        <label for="video-upload" class="upload-label">Upload a video file</label>
+        <input id="video-upload" type="file" accept="video/*" />
+      </div>
+      <div class="panel-row transport">
+        <button id="play-pause-btn">⏯</button>
+        <input id="seek-bar" type="range" min="0" max="100" value="0" step="0.1" />
+        <button id="mute-btn">🔊</button>
+      </div>
+    </div>
+  </div>
+
+  <button id="panel-open" class="round-btn">🎬</button>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

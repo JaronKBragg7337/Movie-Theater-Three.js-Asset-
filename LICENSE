@@ -1,0 +1,49 @@
+CC0 1.0 Universal — Public Domain Dedication
+
+The person who associated a work with this deed has dedicated the work to the
+public domain by waiving all of their rights to the work worldwide under
+copyright law, including all related and neighboring rights, to the extent
+allowed by law.
+
+You can copy, modify, distribute and perform the work, even for commercial
+purposes, all without asking permission.
+
+Full legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+
+-------------------------------------------------------------------------------
+SCOPE OF THIS DEDICATION
+-------------------------------------------------------------------------------
+
+The CC0 dedication above covers everything authored in this repository:
+
+  * all source code (src/*.js, index.html, style.css)
+  * all geometry, which is generated procedurally at runtime
+  * all textures, which are generated procedurally at runtime from code in
+    src/textures.js — no scanned, photographed, or downloaded image is used,
+    so there is no third-party image licence to inherit.
+
+There are no bundled binary assets. Nothing here is derived from a
+copyrighted texture pack, model library, or photo source.
+
+
+-------------------------------------------------------------------------------
+THIRD-PARTY DEPENDENCIES (not covered by this dedication)
+-------------------------------------------------------------------------------
+
+three.js
+  Loaded from a CDN at runtime; not vendored in this repository.
+  Copyright (c) 2010-2025 three.js authors — MIT Licence.
+  https://github.com/mrdoob/three.js/blob/dev/LICENSE
+
+Demo video content
+  The default playlist in src/videoscreen.js streams Blender Foundation open
+  movies (Big Buck Bunny, Sintel, Tears of Steel, Elephants Dream, Spring,
+  Coffee Run, HERO, Caminandes, Glass Half, The Daily Dweebs) from Wikimedia
+  Commons. Those films are licensed Creative Commons Attribution (CC-BY) by
+  the Blender Foundation — https://www.blender.org
+
+  They are referenced by URL only; no video file is redistributed here. If
+  you ship this asset, either keep the on-screen attribution or replace the
+  playlist with your own sources. Nothing about the CC-BY films restricts the
+  CC0 status of the code and procedural assets in this repository.
