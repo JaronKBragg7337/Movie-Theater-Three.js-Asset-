@@ -117,7 +117,10 @@ export async function resolveVideoUrl(input, fetchImpl = globalThis.fetch) {
 export function embedUrlFor(source, pageOrigin = globalThis.location?.origin || '') {
   if (source.provider === 'youtube') {
     const params = new URLSearchParams({
-      autoplay: '1', mute: '1', playsinline: '1', controls: '1',
+      // Audible autoplay is blocked on iPhone. Start cued and unmuted so the
+      // user's tap lands inside YouTube's own player and legitimately starts
+      // playback with sound instead of pausing a forced-muted autoplay.
+      autoplay: '0', playsinline: '1', controls: '1',
       enablejsapi: '1', rel: '0', loop: '1', playlist: source.id,
     });
     if (source.start) params.set('start', String(source.start));

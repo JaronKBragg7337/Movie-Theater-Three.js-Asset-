@@ -63,6 +63,8 @@ frame, so it is never black) and accepts:
   displayed on the physical theater screen with each provider's supported
   iframe player. Because browser security does not expose those cross-origin
   frames to WebGL, provider embeds deliberately use neutral screen spill.
+  YouTube starts cued and unmuted: tap its native Play control to begin with
+  sound. This extra in-player gesture is required by iPhone autoplay policy.
 - **Local upload** — pick a file; it plays from a blob URL.
 
 For direct URLs, the CORS header matters: the auditorium lighting is driven by

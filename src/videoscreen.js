@@ -123,6 +123,45 @@ function waitForPresentedFrame(video, timeoutMs = 5000) {
   });
 }
 
+let youtubeApiPromise = null;
+
+/** Load YouTube's supported iframe controller once and preserve any host callback. */
+function loadYouTubeIframeApi(timeoutMs = 15000) {
+  if (globalThis.YT?.Player) return Promise.resolve(globalThis.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Timed out loading the YouTube player controls.')), timeoutMs);
+    const previousReady = globalThis.onYouTubeIframeAPIReady;
+    globalThis.onYouTubeIframeAPIReady = () => {
+      try {
+        if (typeof previousReady === 'function') previousReady();
+      } finally {
+        clearTimeout(timeout);
+        resolve(globalThis.YT);
+      }
+    };
+
+    let script = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener('error', () => {
+      clearTimeout(timeout);
+      youtubeApiPromise = null;
+      reject(new Error('YouTube player controls could not be loaded.'));
+    }, { once: true });
+  });
+  const pending = youtubeApiPromise;
+  pending.catch(() => {
+    if (youtubeApiPromise === pending) youtubeApiPromise = null;
+  });
+  return youtubeApiPromise;
+}
+
 /** Academy-style countdown leader, drawn live so the screen is never black. */
 class Leader {
   constructor() {
@@ -185,6 +224,7 @@ export class VideoScreen {
     this.embedObject = null;
     this.embedIframe = null;
     this.embedProvider = null;
+    this.youtubePlayer = null;
     this._embedTarget = new THREE.Vector3();
     this._embedDirection = new THREE.Vector3();
     this._embedHit = new THREE.Vector3();
@@ -258,6 +298,8 @@ export class VideoScreen {
       decodedFrame: false,
       sampling: true,
       renderCheck: null,
+      providerReady: false,
+      needsUserGesture: false,
       error: null,
     };
   }
@@ -338,9 +380,12 @@ export class VideoScreen {
   }
 
   _clearEmbed() {
-    if (!this.embedObject) return;
-    this.embedObject.removeFromParent();
-    this.embedObject.element?.remove();
+    if (this.youtubePlayer) {
+      try { this.youtubePlayer.destroy(); } catch { /* already detached */ }
+    }
+    this.youtubePlayer = null;
+    this.embedObject?.removeFromParent();
+    this.embedObject?.element?.remove();
     this.embedObject = null;
     this.embedIframe = null;
     this.embedProvider = null;
@@ -360,6 +405,8 @@ export class VideoScreen {
       decodedFrame: false,
       sampling: true,
       renderCheck: null,
+      providerReady: false,
+      needsUserGesture: false,
     });
   }
 
@@ -397,6 +444,8 @@ export class VideoScreen {
       selectedFormat: candidate.label || candidate.type || 'Direct media',
       decodedFrame: true,
       sampling: true,
+      providerReady: false,
+      needsUserGesture: false,
       error: null,
     });
     this.videoTexture.needsUpdate = true;
@@ -453,8 +502,8 @@ export class VideoScreen {
     return this.loadEmbed(resolved);
   }
 
-  loadEmbed(source) {
-    ++this._loadToken;
+  async loadEmbed(source) {
+    const token = ++this._loadToken;
     this._releaseObjectUrl();
     this.video.pause();
     this._clearEmbed();
@@ -487,21 +536,108 @@ export class VideoScreen {
     this.material.color.setHex(0x181a20);
     this.material.needsUpdate = true;
     this._resetSampler();
+    const youtube = source.provider === 'youtube';
     Object.assign(this.state, {
-      playing: true,
-      muted: true,
+      // YouTube starts cued and unmuted. Audible autoplay is intentionally
+      // avoided so an iPhone tap inside the provider player can satisfy the
+      // browser's media-gesture rule. TikTok retains muted autoplay.
+      playing: !youtube,
+      muted: !youtube,
       source: 'embed',
       title: `${source.provider === 'youtube' ? 'YouTube' : 'TikTok'} ${source.id}`,
       selectedFormat: `${source.provider} embed`,
       decodedFrame: false,
       sampling: false,
       renderCheck: { ok: true, mode: 'provider-embed-neutral-spill' },
+      providerReady: !youtube,
+      needsUserGesture: youtube,
       error: null,
     });
-    return { ...source, embedUrl: frame.src };
+
+    let controller = 'native-iframe';
+    if (youtube) {
+      try {
+        const player = await this._connectYouTubePlayer(frame, token);
+        if (player) controller = 'youtube-iframe-api';
+      } catch (error) {
+        // The native iframe remains fully usable even if the optional parent
+        // controller is unavailable; its own Play control is the audio-safe
+        // path on iPhone in either case.
+        console.warn('[screen] YouTube controller unavailable:', error);
+      }
+    }
+    return { ...source, embedUrl: this.embedIframe?.src || frame.src, controller };
+  }
+
+  async _connectYouTubePlayer(frame, token) {
+    const YT = await loadYouTubeIframeApi();
+    if (token !== this._loadToken || frame !== this.embedIframe) return null;
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timeout = setTimeout(() => finish(null, new Error('YouTube player did not become ready.')), 15000);
+      const finish = (player, error = null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (error) reject(error); else resolve(player);
+      };
+
+      let player;
+      player = new YT.Player(frame, {
+        events: {
+          onReady: (event) => {
+            if (token !== this._loadToken || frame !== this.embedIframe) {
+              try { event.target.destroy(); } catch { /* already detached */ }
+              finish(null, new Error('Superseded by a newer source.'));
+              return;
+            }
+            this.youtubePlayer = event.target;
+            this.embedIframe = event.target.getIframe();
+            this.embedIframe.style.cssText = 'display:block;width:1280px;height:536px;border:0;background:#111;pointer-events:auto';
+            // Safe because playback is still cued. A later native Play tap
+            // starts audible media without Safari pausing it.
+            event.target.unMute();
+            event.target.setVolume(100);
+            Object.assign(this.state, {
+              playing: false,
+              muted: false,
+              providerReady: true,
+              needsUserGesture: true,
+            });
+            finish(event.target);
+          },
+          onStateChange: (event) => {
+            if (event.target !== this.youtubePlayer) return;
+            const active = event.data === YT.PlayerState.PLAYING || event.data === YT.PlayerState.BUFFERING;
+            this.state.playing = active;
+            if (event.data === YT.PlayerState.PLAYING) this.state.needsUserGesture = false;
+          },
+          onAutoplayBlocked: () => {
+            this.state.playing = false;
+            this.state.needsUserGesture = true;
+          },
+          onError: (event) => {
+            const error = new Error(`YouTube player error ${event.data}.`);
+            this.state.error = error.message;
+            finish(null, error);
+          },
+        },
+      });
+    });
   }
 
   _postEmbed(action) {
+    if (this.embedProvider === 'youtube' && this.youtubePlayer) {
+      if (action === 'play') this.youtubePlayer.playVideo();
+      else if (action === 'pause') this.youtubePlayer.pauseVideo();
+      else if (action === 'mute') this.youtubePlayer.mute();
+      else {
+        this.youtubePlayer.unMute();
+        this.youtubePlayer.setVolume(100);
+      }
+      return;
+    }
     if (!this.embedIframe?.contentWindow) return;
     if (this.embedProvider === 'youtube') {
       const func = action === 'play' ? 'playVideo' : action === 'pause' ? 'pauseVideo' : action === 'mute' ? 'mute' : 'unMute';
@@ -515,16 +651,20 @@ export class VideoScreen {
   play() {
     if (this.state.source === 'embed') {
       this._postEmbed('play');
-      this.state.playing = true;
+      if (this.embedProvider !== 'youtube') this.state.playing = true;
       return Promise.resolve();
     }
     return this.video.play().then(() => { this.state.playing = true; }).catch(() => {});
   }
 
   pause() {
-    if (this.state.source === 'embed') this._postEmbed('pause');
-    else this.video.pause();
-    this.state.playing = false;
+    if (this.state.source === 'embed') {
+      this._postEmbed('pause');
+      if (this.embedProvider !== 'youtube') this.state.playing = false;
+    } else {
+      this.video.pause();
+      this.state.playing = false;
+    }
   }
 
   toggle() { return this.state.playing ? this.pause() : this.play(); }
@@ -568,6 +708,14 @@ export class VideoScreen {
 
     this._frame++;
     if (this._frame % 4 !== 0) return;
+    if (this.state.source === 'embed' && this.embedProvider === 'youtube' && this.youtubePlayer) {
+      try {
+        const playerState = this.youtubePlayer.getPlayerState();
+        this.state.playing = playerState === 1 || playerState === 3;
+        this.state.muted = this.youtubePlayer.isMuted();
+        if (playerState === 1) this.state.needsUserGesture = false;
+      } catch { /* controller may be tearing down */ }
+    }
     let r = 0.60, g = 0.60, b = 0.62, lum = 0.55;
     if (this.state.source !== 'embed') {
       try {

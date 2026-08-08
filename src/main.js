@@ -557,7 +557,9 @@ function writeHinge(meshes, i, rec) {
     try {
       const selected = await screen.loadUrl(u);
       if (selected.kind === 'embed') {
-        setVideoStatus(`${selected.provider === 'youtube' ? 'YouTube' : 'TikTok'} official embedded player · neutral auditorium spill`);
+        setVideoStatus(selected.provider === 'youtube'
+          ? 'YouTube ready · tap Play on the movie screen for sound · neutral auditorium spill'
+          : 'TikTok official embedded player · neutral auditorium spill');
       } else {
         setVideoStatus(`Direct media · ${selected.label || selected.type} · rendered VideoTexture verified`);
       }

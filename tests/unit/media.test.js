@@ -28,6 +28,9 @@ test('normal YouTube share forms resolve to the official player', () => {
   assert.match(embed, /^https:\/\/www\.youtube\.com\/embed\/M7lc1UVf-VE\?/);
   assert.match(embed, /playsinline=1/);
   assert.match(embed, /origin=https%3A%2F%2Fcinema\.example/);
+  const embedUrl = new URL(embed);
+  assert.equal(embedUrl.searchParams.get('autoplay'), '0');
+  assert.equal(embedUrl.searchParams.has('mute'), false);
 });
 
 test('canonical TikTok shares resolve to the official player', () => {

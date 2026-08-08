@@ -122,9 +122,10 @@ test('reported iPhone playlist failures render real H.264 VideoTextures', async 
   }
 });
 
-test('provider URLs use embeds and neutral spill instead of a raw video source', async ({ page }) => {
-  await openTheater(page);
-  const result = await page.evaluate(async () => {
+test('provider URLs are cued unmuted for native playback and neutral spill', async ({ page }) => {
+  const errors = await openTheater(page);
+  await page.getByRole('button', { name: 'Enter Theater' }).click();
+  const initial = await page.evaluate(async () => {
     const player = THEATER.player;
     player.keys.clear();
     player.move.set(0, 0);
@@ -137,11 +138,7 @@ test('provider URLs use embeds and neutral spill instead of a raw video source',
     const youtube = await THEATER.screen.loadUrl('https://www.youtube.com/watch?v=M7lc1UVf-VE&t=3s');
     THEATER.screen.updateEmbedVisibility(THEATER.camera, THEATER.player.colliders);
     const visibleInHouse = THEATER.screen.embedObject.visible;
-    player.pos.set(0, THEATER.walkable.heightAt(0, 20), 20);
-    player.pitch = 0;
-    player.update(0.016);
-    THEATER.camera.updateMatrixWorld(true);
-    THEATER.screen.updateEmbedVisibility(THEATER.camera, THEATER.player.colliders);
+    const controller = THEATER.screen.youtubePlayer;
     return {
       youtube,
       source: THEATER.screen.state.source,
@@ -149,16 +146,40 @@ test('provider URLs use embeds and neutral spill instead of a raw video source',
       neutralMode: THEATER.screen.state.renderCheck?.mode,
       textureAttached: THEATER.screen.material.map === THEATER.screen.videoTexture,
       visibleInHouse,
+      providerReady: THEATER.screen.state.providerReady,
+      needsUserGesture: THEATER.screen.state.needsUserGesture,
+      muted: controller?.isMuted(),
+      volume: controller?.getVolume(),
+      playerState: controller?.getPlayerState(),
+    };
+  });
+
+  const afterLoad = await page.evaluate(() => {
+    const player = THEATER.player;
+    player.pos.set(0, THEATER.walkable.heightAt(0, 20), 20);
+    player.pitch = 0;
+    player.update(0.016);
+    THEATER.camera.updateMatrixWorld(true);
+    THEATER.screen.updateEmbedVisibility(THEATER.camera, THEATER.player.colliders);
+    return {
       visibleThroughLobbyWall: THEATER.screen.embedObject.visible,
     };
   });
 
-  expect(result.youtube.provider).toBe('youtube');
-  expect(result.youtube.embedUrl).toMatch(/^https:\/\/www\.youtube\.com\/embed\//);
-  expect(result.source).toBe('embed');
-  expect(result.sampling).toBe(false);
-  expect(result.neutralMode).toBe('provider-embed-neutral-spill');
-  expect(result.textureAttached).toBe(false);
-  expect(result.visibleInHouse).toBe(true);
-  expect(result.visibleThroughLobbyWall).toBe(false);
+  expect(errors).toEqual([]);
+  expect(initial.youtube.provider).toBe('youtube');
+  expect(initial.youtube.controller).toBe('youtube-iframe-api');
+  expect(initial.youtube.embedUrl).toMatch(/^https:\/\/www\.youtube\.com\/embed\//);
+  expect(new URL(initial.youtube.embedUrl).searchParams.has('mute')).toBe(false);
+  expect(initial.source).toBe('embed');
+  expect(initial.sampling).toBe(false);
+  expect(initial.neutralMode).toBe('provider-embed-neutral-spill');
+  expect(initial.textureAttached).toBe(false);
+  expect(initial.visibleInHouse).toBe(true);
+  expect(initial.providerReady).toBe(true);
+  expect(initial.needsUserGesture).toBe(true);
+  expect(initial.muted).toBe(false);
+  expect(initial.volume).toBe(100);
+  expect([2, 5]).toContain(initial.playerState);
+  expect(afterLoad.visibleThroughLobbyWall).toBe(false);
 });
