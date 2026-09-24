@@ -750,4 +750,14 @@ function writeHinge(meshes, i, rec) {
     showMediaPanel: showPanel,
     report: () => inspector.refreshReport(),
   };
+
+  // Arriving through a world's theater door (heartbeatobservatory.com: Ashgrove, Town Square, World 2)
+  // with ?start=seats: begin in a good seat - middle row, centre - facing the screen, instead of outside.
+  if (new URLSearchParams(location.search).get('start') === 'seats') {
+    const row = ROW_LETTERS[Math.floor(L.rows / 2)];
+    const col = Math.ceil(L.seatsPerRow / 2);
+    const seat = seating.seats.find((x) => x.label === `${row}${col}`)
+      || seating.seats[Math.floor(seating.seats.length / 2)];
+    if (seat) window.THEATER.sit(seat.label);
+  }
 })();
