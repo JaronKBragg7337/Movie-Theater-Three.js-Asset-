@@ -194,7 +194,7 @@ export class Inspector {
       .ins-ok{color:#7bffb0}
       .ins-tp{display:flex;gap:6px;margin-top:8px}
       #ins-tp-input{flex:1;min-width:0;background:rgba(255,255,255,.07);border:1px solid rgba(42,214,255,.35);
-        color:#eaffff;border-radius:5px;padding:5px 7px;font:12px ui-monospace,monospace}
+        color:#eaffff;border-radius:5px;padding:5px 7px;font:16px ui-monospace,monospace}
       #ins-tp-go{background:rgba(42,214,255,.2);border:1px solid rgba(42,214,255,.5);color:#bfeeff;border-radius:5px;padding:5px 10px;cursor:pointer}
       .ins-foot{margin-top:7px;opacity:.55;font-size:10.5px}
       @media(max-width:640px){#inspector-hud{width:calc(100vw - 24px);font-size:11px}.ins-issues{max-height:110px}}

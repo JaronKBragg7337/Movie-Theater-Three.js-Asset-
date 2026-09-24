@@ -106,7 +106,10 @@ body.is-touch #mobile-buttons { flex-direction: column; }
 .video-item { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; cursor: pointer; display: flex; justify-content: space-between; }
 .video-item:hover, .video-item.active { background: rgba(232,194,106,.15); border-color: rgba(232,194,106,.4); }
 .panel-row { display: flex; gap: 8px; align-items: center; }
-#video-url { flex: 1; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15); color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 12.5px; }
+/* 16px is the floor: iPhone Safari zooms the whole page into any smaller text box on focus, and with the
+   look/joystick zones owning every touch there was no way to pinch back out. min-width:0 lets the box shrink
+   so the Play URL button beside it stays on screen instead of being cut off by the panel's edge. */
+#video-url { flex: 1; min-width: 0; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15); color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 16px; }
 #video-url { user-select: text; }
 #load-url-btn, .upload-label { background: rgba(232,194,106,.18); border: 1px solid rgba(232,194,106,.4); color: #f2e6c8; padding: 8px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 #video-status { min-height: 2.7em; color: rgba(242,230,200,.72); font-size: 11px; line-height: 1.35; }
@@ -117,5 +120,6 @@ body.is-touch #mobile-buttons { flex-direction: column; }
 #seek-bar { flex: 1; }
 
 @media (max-width: 640px) {
-  #video-panel { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  #video-panel { bottom: calc(84px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 120px); overflow-y: auto; }
 }
+input, select, textarea { font-size: max(16px, 1em); }
