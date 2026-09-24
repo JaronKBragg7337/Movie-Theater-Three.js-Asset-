@@ -49,6 +49,7 @@ export function connectSharedScreen({ screen, playlist, setStatus, onChange = ()
       const send = () => { lastSeekSent = performance.now(); post({ type: 'local', action, t: screen.currentTime, playing: screen.state.playing }); };
       if (performance.now() - lastSeekSent > 250) send(); else seekTimer = setTimeout(send, 260);
     } else if (action === 'stop') {
+      if (!api.canStop) return;              // not yours and not an admin: the room keeps playing
       post({ type: 'local', action, admin: api.admin && !api.current?.mine });
       api.current = null;
       setStatus('Stopped for everyone.');
