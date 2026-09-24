@@ -50,6 +50,8 @@
     <button id="menu-btn" class="round-btn" type="button" aria-label="Open media controls" title="Open media controls (M)">MEDIA</button>
   </div>
 
+  <button id="sound-btn" type="button" hidden>🔊 Tap for sound</button>
+
   <!-- Screen / video control panel -->
   <div id="video-panel" class="hidden">
     <div class="panel-header">
@@ -72,6 +74,8 @@
         <input id="seek-bar" type="range" min="0" max="100" value="0" step="0.1" />
         <button id="mute-btn">🔊</button>
       </div>
+      <div class="panel-row"><button id="stop-btn" type="button" hidden>Stop</button></div>
+      <div id="share-note" hidden></div>
     </div>
   </div>
 

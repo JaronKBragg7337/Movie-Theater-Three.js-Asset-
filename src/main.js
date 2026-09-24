@@ -13,6 +13,7 @@ import { DoorSet } from './doors.js';
 import { buildSeatParts, buildEndStandard, buildNumberTag, makeNumberAtlas, SEAT } from './seat.js';
 import { Player, bindInput } from './controls.js';
 import { VideoScreen, PLAYLIST } from './videoscreen.js';
+import { connectSharedScreen } from './shared.js';
 import { Inspector } from './inspector.js';
 import { register, registerValidator, registry, worldToGrid, gridLabel } from './registry.js';
 import { WalkableSurfaceMap } from './walkable.js';
@@ -521,6 +522,32 @@ function writeHinge(meshes, i, rec) {
     videoStatus.textContent = message;
     videoStatus.classList.toggle('error', isError);
   };
+  // Shared screen: in a host page that syncs a room, what anyone plays plays for everyone.
+  const stopBtn = document.getElementById('stop-btn');
+  const soundBtn = document.getElementById('sound-btn');
+  const shareNote = document.getElementById('share-note');
+  const syncSharedUi = () => {
+    stopBtn.hidden = !(shared.active ? shared.canStop : screen.state.source !== 'leader');
+    stopBtn.textContent = shared.active ? 'Stop for everyone' : 'Stop';
+    shareNote.hidden = !shared.active;
+    shareNote.textContent = shared.admin
+      ? 'Shared screen · everyone in the theater sees what plays here · you are an admin: Stop works on any video'
+      : 'Shared screen · everyone in the theater sees what plays here';
+  };
+  const shared = connectSharedScreen({ screen, playlist: PLAYLIST, setStatus: setVideoStatus, onChange: () => syncSharedUi() });
+  stopBtn.addEventListener('click', () => {
+    if (shared.active) shared.local('stop');
+    screen.stop();
+    list.querySelectorAll('.video-item').forEach((n) => n.classList.remove('active'));
+    if (!shared.active) setVideoStatus('Stopped.');
+    syncSharedUi();
+  });
+  soundBtn.addEventListener('click', () => { screen.setMuted(false); muteBtn.textContent = '🔊'; });
+  setInterval(() => {
+    // Offer sound when something someone else started is playing silently here.
+    soundBtn.hidden = !(shared.active && shared.current && !shared.current.mine && screen.state.muted && screen.state.source === 'video');
+    syncSharedUi();
+  }, 700);
   PLAYLIST.forEach((v, i) => {
     const d = document.createElement('div');
     d.className = 'video-item';
@@ -530,6 +557,7 @@ function writeHinge(meshes, i, rec) {
       d.classList.add('active');
       screen.setMuted(false);
       setVideoStatus(`Loading ${v.title}…`);
+      shared.local('load', { src: { kind: 'film', index: i } });
       try {
         const selected = await screen.load(v.sources, v.title);
         setVideoStatus(`${v.title} · ${selected.label || selected.type} · rendered VideoTexture verified`);
@@ -539,7 +567,6 @@ function writeHinge(meshes, i, rec) {
       muteBtn.textContent = screen.state.muted ? '🔇' : '🔊';
     });
     list.appendChild(d);
-    void i;
   });
   const showPanel = (v) => {
     panel.classList.toggle('hidden', !v);
@@ -585,6 +612,7 @@ function writeHinge(meshes, i, rec) {
     if (!u) return;
     screen.setMuted(false);
     setVideoStatus('Recognising video link…');
+    shared.local('load', { src: { kind: 'url', url: u } });
     try {
       const selected = await screen.loadUrl(u);
       if (selected.kind === 'embed') {
@@ -604,6 +632,7 @@ function writeHinge(meshes, i, rec) {
     if (!f) return;
     screen.setMuted(false);
     setVideoStatus(`Loading ${f.name}…`);
+    shared.local('load', { src: { kind: 'file', file: f, name: f.name } });
     try {
       const selected = await screen.loadFile(f);
       setVideoStatus(`${f.name} · ${selected.label || 'local media'} · rendered VideoTexture verified`);
@@ -612,13 +641,17 @@ function writeHinge(meshes, i, rec) {
     }
     muteBtn.textContent = screen.state.muted ? '🔇' : '🔊';
   });
-  document.getElementById('play-pause-btn').addEventListener('click', () => screen.toggle());
+  document.getElementById('play-pause-btn').addEventListener('click', async () => {
+    const willPlay = !screen.state.playing;
+    await screen.toggle();
+    shared.local(willPlay ? 'play' : 'pause');
+  });
   muteBtn.addEventListener('click', () => {
     screen.setMuted(!screen.state.muted);
     muteBtn.textContent = screen.state.muted ? '🔇' : '🔊';
   });
   const seekBar = document.getElementById('seek-bar');
-  seekBar.addEventListener('input', () => screen.seekFraction(seekBar.value / 100));
+  seekBar.addEventListener('input', () => { screen.seekFraction(seekBar.value / 100); shared.local('seek'); });
 
   /* ---- post processing ---- */
   let composer = null;
@@ -748,6 +781,7 @@ function writeHinge(meshes, i, rec) {
     validateWalkables,
     playBuiltIn: (index = 0) => screen.load(PLAYLIST[index]?.sources || PLAYLIST[0].sources, PLAYLIST[index]?.title || PLAYLIST[0].title),
     showMediaPanel: showPanel,
+    shared,
     report: () => inspector.refreshReport(),
   };
 

@@ -738,6 +738,32 @@ export class VideoScreen {
     this.video.currentTime = THREE.MathUtils.clamp(fraction, 0, 1) * this.video.duration;
   }
 
+  /** Seconds into whatever is playing (direct media or the YouTube controller). */
+  get currentTime() {
+    if (this.state.source === 'video') return this.video.currentTime || 0;
+    if (this.state.source === 'embed' && this.youtubePlayer) {
+      try { return this.youtubePlayer.getCurrentTime() || 0; } catch { /* tearing down */ }
+    }
+    return 0;
+  }
+
+  seekTo(seconds) {
+    if (!Number.isFinite(seconds)) return;
+    if (this.state.source === 'video') {
+      const end = this.video.duration || seconds;
+      this.video.currentTime = THREE.MathUtils.clamp(seconds, 0, end);
+    } else if (this.state.source === 'embed' && this.youtubePlayer) {
+      try { this.youtubePlayer.seekTo(Math.max(0, seconds), true); } catch { /* not ready */ }
+    }
+  }
+
+  /** Nothing showing: back to the countdown leader, any pending load abandoned. */
+  stop() {
+    this._loadToken++;
+    this._releaseObjectUrl();
+    this._showLeader();
+  }
+
   get progress() {
     return this.state.source === 'video' && this.video.duration ? this.video.currentTime / this.video.duration : 0;
   }

@@ -123,3 +123,10 @@ body.is-touch #mobile-buttons { flex-direction: column; }
   #video-panel { bottom: calc(84px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 120px); overflow-y: auto; }
 }
 input, select, textarea { font-size: max(16px, 1em); }
+
+/* shared screen */
+#stop-btn { background: rgba(255,120,120,.14); border: 1px solid rgba(255,140,140,.45); color: #ffd9d9; padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; min-height: 40px; }
+#share-note { color: rgba(242,230,200,.6); font-size: 11px; line-height: 1.35; }
+#sound-btn { position: fixed; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 60;
+  background: #e8c26a; color: #1a1408; border: 0; border-radius: 999px; padding: 12px 20px; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+#sound-btn[hidden], #stop-btn[hidden], #share-note[hidden] { display: none; }
